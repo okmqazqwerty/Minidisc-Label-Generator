@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniDisc 标签生成器 (经典竖向多列排版版)</title>
+    <!-- SheetJS for Excel Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
+
+        :root {
+            --bg-color: #0d1117;
+            --sidebar-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --accent-blue: #00b4d8;
+            --accent-red: #e63946;
+            --label-width: 60mm;
+            --label-height: 40mm;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Controls */
+        .controls-sidebar {
+            width: 360px;
+            background: var(--sidebar-bg);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            border-bottom: 2px solid var(--accent-blue);
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #8b949e;
+        }
+
+        input[type="text"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 8px 10px;
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #f0f6fc;
+            font-size: 13px;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        textarea {
+            height: 140px;
+            resize: vertical;
+            font-family: 'Fira Code', monospace;
+            line-height: 1.4;
+            font-size: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: #238636;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .btn:hover { background: #2ea043; }
+        .btn-primary { background: #1f6beb; }
+        .btn-primary:hover { background: #388bfd; }
+
+        /* Preview Workspace */
+        .preview-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .preview-title {
+            color: #8b949e;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .label-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        /* Outer Card Shadow Box */
+        .md-card-outer {
+            background: #06090e;
+            padding: 12px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: inline-block;
+        }
+
+        .md-label {
+            width: var(--label-width, 60mm);
+            height: var(--label-height, 40mm);
+            padding: var(--label-padding, 2.5mm 3mm);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            border-radius: 8px;
+            transition: width 0.2s, height 0.2s;
+        }
+
+        /* --- Dark Theme --- */
+        .theme-dark {
+            background: #0b1320;
+            color: #e2e8f0;
+            border: 1px solid #1e293b;
+        }
+        .theme-dark .md-logo-box { background: #00b4d8; color: #0b1320; }
+        .theme-dark .artist-name { color: #f8fafc; }
+        .theme-dark .disc-title { color: #94a3b8; }
+        .theme-dark .header-right-top { color: #cbd5e1; }
+        .theme-dark .header-right-bottom { color: #64748b; }
+        .theme-dark .label-header { border-bottom-color: #1e293b; }
+        .theme-dark .track-num { color: #94a3b8; }
+        .theme-dark .track-name { color: #e2e8f0; }
+        .theme-dark .track-time { color: #64748b; }
+        .theme-dark .label-footer { border-top-color: #1e293b; color: #64748b; }
+
+        /* --- Light Theme (High Contrast) --- */
+        .theme-light {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1.5px solid #111827 !important;
+        }
+        .theme-light .md-logo-box { background: #0088cc !important; color: #ffffff !important; }
+        .theme-light .artist-name { color: #000000 !important; font-weight: 800 !important; }
+        .theme-light .disc-title { color: #374151 !important; font-weight: 600 !important; }
+        .theme-light .header-right-top { color: #111827 !important; font-weight: 700 !important; }
+        .theme-light .header-right-bottom { color: #4b5563 !important; }
+        .theme-light .label-header { border-bottom-color: #111827 !important; }
+        .theme-light .track-num { color: #111827 !important; font-weight: 700 !important; }
+        .theme-light .track-name { color: #000000 !important; font-weight: 600 !important; }
+        .theme-light .track-time { color: #374151 !important; font-weight: 600 !important; }
+        .theme-light .label-footer { border-top-color: #9ca3af !important; color: #111827 !important; font-weight: 600 !important; }
+
+        /* Header Style */
+        .label-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid;
+            padding-bottom: 3px;
+            margin-bottom: 2px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .md-logo-box {
+            font-weight: 900;
+            font-size: 9px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .disc-title-group {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.1;
+        }
+
+        .artist-name {
+            font-weight: 800;
+            font-size: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 130px;
+        }
+
+        .disc-title {
+            font-size: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 130px;
+        }
+
+        .header-right {
+            text-align: right;
+            line-height: 1.1;
+        }
+
+        .header-right-top {
+            font-weight: 700;
+            font-size: 8.5px;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .header-right-bottom {
+            font-size: 7px;
+        }
+
+        /* Column Container (Multi-column flex layout) */
+        .track-columns-wrapper {
+            display: flex;
+            gap: var(--col-gap, 10px);
+            flex: 1;
+            overflow: hidden;
+            margin-top: 2px;
+            margin-bottom: 2px;
+        }
+
+        .track-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+
+        .track-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: var(--track-font-size, 6.2px);
+            line-height: var(--track-line-height, 1.15);
+            white-space: nowrap;
+            overflow: hidden;
+            height: var(--track-item-height, auto);
+        }
+
+        .track-num-title {
+            display: flex;
+            gap: 3px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .track-num {
+            font-weight: 700;
+            font-family: 'Fira Code', monospace;
+            min-width: 13px;
+        }
+
+        .track-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .track-time {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            margin-left: 2px;
+        }
+
+        /* Bottom Footer Bar */
+        .label-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px dashed;
+            padding-top: 2px;
+            margin-top: 1px;
+            font-size: 6.5px;
+            font-family: 'Fira Code', monospace;
+            line-height: 1;
+        }
+
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .red-dot {
+            width: 4px;
+            height: 4px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* Dynamic Print Page Regulations */
+        @media print {
+            html, body {
+                background: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: hidden !important;
+            }
+            .controls-sidebar, .preview-title {
+                display: none !important;
+            }
+            .preview-area {
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .md-card-outer {
+                background: none !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            .md-label {
+                box-shadow: none !important;
+                margin: 0 !important;
+                border-radius: 0 !important;
+                page-break-after: always !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-sidebar">
+        <h2 style="font-size:18px; color:#f0f6fc;">MiniDisc 标签设计器</h2>
+
+        <div class="section-title">1. 标签纸物理尺寸 (mm)</div>
+        <div class="form-group">
+            <label>预设尺寸选择</label>
+            <select id="presetSize" onchange="applyPresetSize()">
+                <option value="60x40" selected>60 × 40 mm (MD 标准正面标签)</option>
+                <option value="54x35">54 × 35 mm (MD 小型贴纸)</option>
+                <option value="70x50">70 × 50 mm (MD 外盒/软壳标签)</option>
+                <option value="custom">自定义尺寸 (自由输入 Width x Height)</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>宽度 (Width mm)</label>
+                <input type="number" id="labelWidth" value="60" min="20" max="200" oninput="onCustomDimensionChange()">
+            </div>
+            <div class="form-group">
+                <label>高度 (Height mm)</label>
+                <input type="number" id="labelHeight" value="40" min="10" max="200" oninput="onCustomDimensionChange()">
+            </div>
+        </div>
+
+        <div class="section-title">2. 基础头部信息</div>
+        <div class="form-group">
+            <label>歌手 / 主标题</label>
+            <input type="text" id="discArtist" value="ARTIST-NAME" oninput="renderLabels()">
+        </div>
+        <div class="form-group">
+            <label>专辑名 / 副标题</label>
+            <input type="text" id="discTitle" value="ALBUM-TITLE" oninput="renderLabels()">
+        </div>
+        <div class="form-group">
+            <label>右上角编号 (例如 MD-001)</label>
+            <input type="text" id="headerCode" value="MD-001" oninput="renderLabels()">
+        </div>
+
+        <div class="section-title">3. 排版与列数设置</div>
+        <div class="form-group">
+            <label>分列显示方式</label>
+            <select id="columnCount" onchange="renderLabels()">
+                <option value="1">单列 (从上至下)</option>
+                <option value="2" selected>双列 (左列填满后排右列，对齐分布)</option>
+                <option value="3">三列 (从左至右依次填满)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>主题色彩</label>
+            <select id="themeStyle" onchange="renderLabels()">
+                <option value="theme-dark">复古暗黑 (黑青夜间风)</option>
+                <option value="theme-light" selected>简约高对比白 (清晰打印风)</option>
+            </select>
+        </div>
+
+        <div class="section-title">4. 曲目导入与编辑</div>
+        <div class="btn-group">
+            <button class="btn" onclick="document.getElementById('excelInput').click()">导入 XLSX / CSV</button>
+            <input type="file" id="excelInput" accept=".xlsx, .xls, .csv" style="display:none" onchange="handleFileUpload(event)">
+        </div>
+
+        <div class="form-group" style="margin-top:10px;">
+            <label>曲目列表 (每行一首)</label>
+            <textarea id="trackInput" oninput="renderLabels()">01. Track-01 04:00
+02. Track-02 04:00
+03. Track-03 04:00
+04. Track-04 04:00
+05. Track-05 04:00
+06. Track-06 04:00
+07. Track-07 04:00
+08. Track-08 04:00
+09. Track-09 04:00
+10. Track-10 04:00
+11. Track-11 04:00
+12. Track-12 04:00
+13. Track-13 04:00
+14. Track-14 04:00
+15. Track-15 04:00
+16. Track-16 04:00
+17. Track-17 04:00
+18. Track-18 04:00
+19. Track-19 04:00
+20. Track-20 04:00
+21. Track-21 04:00
+22. Track-22 04:00
+23. Track-23 04:00
+24. Track-24 04:00
+25. Track-25 04:00
+26. Track-26 04:00
+27. Track-27 04:00
+28. Track-28 04:00</textarea>
+        </div>
+
+        <div class="btn-group" style="margin-top:10px;">
+            <button class="btn btn-primary" onclick="triggerPrint()">打印标签</button>
+        </div>
+    </div>
+
+    <div class="preview-area">
+        <div class="preview-title" id="previewTitle">打印预览 (60mm × 40mm)</div>
+        <div class="label-container" id="labelContainer"></div>
+    </div>
+
+    <script>
+        let dynamicPrintStyle = null;
+
+        function applyPresetSize() {
+            const preset = document.getElementById('presetSize').value;
+            const widthInput = document.getElementById('labelWidth');
+            const heightInput = document.getElementById('labelHeight');
+
+            if (preset === "60x40") {
+                widthInput.value = 60;
+                heightInput.value = 40;
+            } else if (preset === "54x35") {
+                widthInput.value = 54;
+                heightInput.value = 35;
+            } else if (preset === "70x50") {
+                widthInput.value = 70;
+                heightInput.value = 50;
+            }
+            renderLabels();
+        }
+
+        function onCustomDimensionChange() {
+            document.getElementById('presetSize').value = "custom";
+            renderLabels();
+        }
+
+        function updatePrintPageRule(w, h) {
+            if (!dynamicPrintStyle) {
+                dynamicPrintStyle = document.createElement('style');
+                document.head.appendChild(dynamicPrintStyle);
+            }
+            dynamicPrintStyle.innerHTML = `@page { size: ${w}mm ${h}mm; margin: 0; }`;
+        }
+
+        function triggerPrint() {
+            const w = document.getElementById('labelWidth').value || 60;
+            const h = document.getElementById('labelHeight').value || 40;
+            updatePrintPageRule(w, h);
+            window.print();
+        }
+
+        function parseTracks(text) {
+            const lines = text.split('\n').filter(l => l.trim().length > 0);
+            return lines.map((line, idx) => {
+                let num = (idx + 1).toString().padStart(2, '0');
+                let time = '';
+                let title = line.trim();
+
+                const timeMatch = title.match(/(\d{1,2}:\d{2})$/);
+                if (timeMatch) {
+                    time = timeMatch[1];
+                    title = title.replace(/\d{1,2}:\d{2}$/, '').trim();
+                }
+
+                const numMatch = title.match(/^(\d+)[.\s\-]/);
+                if (numMatch) {
+                    num = numMatch[1].padStart(2, '0');
+                    title = title.replace(/^\d+[.\s\-]/, '').trim();
+                }
+
+                title = title.replace(/^[\-\s]+|[\-\s]+$/g, '');
+
+                return { num: num + '.', title, time };
+            });
+        }
+
+        function renderLabels() {
+            const w = parseFloat(document.getElementById('labelWidth').value) || 60;
+            const h = parseFloat(document.getElementById('labelHeight').value) || 40;
+
+            document.documentElement.style.setProperty('--label-width', w + 'mm');
+            document.documentElement.style.setProperty('--label-height', h + 'mm');
+            document.getElementById('previewTitle').innerText = `打印预览 (${w}mm × ${h}mm)`;
+
+            const artist = document.getElementById('discArtist').value || 'Artist';
+            const title = document.getElementById('discTitle').value || 'Title';
+            const code = document.getElementById('headerCode').value || 'MD-001';
+            const columns = parseInt(document.getElementById('columnCount').value, 10);
+            const theme = document.getElementById('themeStyle').value;
+            const tracks = parseTracks(document.getElementById('trackInput').value);
+
+            const container = document.getElementById('labelContainer');
+            container.innerHTML = '';
+
+            const totalTracks = tracks.length;
+            const rowsPerCol = Math.ceil(totalTracks / columns);
+
+            let heightScale = h / 40.0;
+            let fontSize = 6.4 * heightScale;
+            let lineHeight = 1.15;
+            let padding = `${2.2 * heightScale}mm ${2.8 * (w/60.0)}mm`;
+
+            if (rowsPerCol > 13) {
+                fontSize = 5.2 * heightScale;
+                lineHeight = 1.05;
+                padding = `${1.5 * heightScale}mm ${2.2 * (w/60.0)}mm`;
+            } else if (rowsPerCol > 10) {
+                fontSize = 5.8 * heightScale;
+                lineHeight = 1.10;
+                padding = `${1.8 * heightScale}mm ${2.5 * (w/60.0)}mm`;
+            }
+
+            const outer = document.createElement('div');
+            outer.className = 'md-card-outer';
+
+            const label = document.createElement('div');
+            label.className = `md-label ${theme}`;
+            label.style.setProperty('--track-font-size', fontSize + 'px');
+            label.style.setProperty('--track-line-height', lineHeight);
+            label.style.setProperty('--label-padding', padding);
+
+            const header = `
+                <div class="label-header">
+                    <div class="header-left">
+                        <div class="md-logo-box">MD</div>
+                        <div class="disc-title-group">
+                            <div class="artist-name">${artist}</div>
+                            <div class="disc-title">${title}</div>
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <div class="header-right-top">${code}</div>
+                        <div class="header-right-bottom">Minidisc</div>
+                    </div>
+                </div>
+            `;
+
+            // Split tracks vertically across columns
+            let columnsHtml = '';
+            for (let c = 0; c < columns; c++) {
+                let colTracks = [];
+                let startIdx = c * rowsPerCol;
+                let endIdx = Math.min(startIdx + rowsPerCol, totalTracks);
+
+                for (let i = startIdx; i < endIdx; i++) {
+                    colTracks.push(tracks[i]);
+                }
+
+                // Generate HTML for tracks in this column
+                let trackItemsHtml = colTracks.map(t => `
+                    <div class="track-item">
+                        <div class="track-num-title">
+                            <span class="track-num">${t.num}</span>
+                            <span class="track-name">${t.title}</span>
+                        </div>
+                        <span class="track-time">${t.time}</span>
+                    </div>
+                `).join('');
+
+                // If this is not the last column, pad empty invisible rows if needed to ensure equal row alignment
+                if (colTracks.length < rowsPerCol) {
+                    let missing = rowsPerCol - colTracks.length;
+                    for (let m = 0; m < missing; m++) {
+                        trackItemsHtml += `<div class="track-item" style="visibility:hidden;"><span class="track-num">.</span></div>`;
+                    }
+                }
+
+                columnsHtml += `<div class="track-column">${trackItemsHtml}</div>`;
+            }
+
+            const gridWrapper = `<div class="track-columns-wrapper">${columnsHtml}</div>`;
+
+            const footer = `
+                <div class="label-footer">
+                    <div class="footer-left">
+                        <span class="red-dot"></span>
+                        <span>DIGITAL AUDIO MD</span>
+                    </div>
+                    <span>---</span>
+                    <span>TRK COUNT: ${totalTracks}</span>
+                </div>
+            `;
+
+            label.innerHTML = header + gridWrapper + footer;
+            outer.appendChild(label);
+            container.appendChild(outer);
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+
+                let formattedText = [];
+                jsonData.forEach((row, idx) => {
+                    if (row.length === 0) return;
+                    let num = row[0] || (idx + 1);
+                    let name = row[1] || '';
+                    let time = row[2] || '';
+                    if (name) {
+                        formattedText.push(`${num}. ${name} ${time ? ' ' + time : ''}`);
+                    }
+                });
+
+                if (formattedText.length > 0) {
+                    document.getElementById('trackInput').value = formattedText.join('\n');
+                    renderLabels();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        renderLabels();
+    </script>
+</body>
+</html>
